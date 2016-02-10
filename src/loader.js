@@ -1,76 +1,92 @@
-// AST demo: http://astexplorer.net/#/4Ifn5ilohb/15
-
+// AST demo: http://astexplorer.net/#/4Ifn5ilohb/18
 import path from 'path';
 import fs from 'fs';
 import shortid from 'shortid';
 
 shortid.characters('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ$_');
 
+export let cache = {};
+
 class PackageLoader {
   constructor(t, nodePath, state, packagePath) {
-    let currentFileAbsPath = path.resolve(state.file.opts.filenameRelative, '..');
+    let opts = state.file.opts;
+    let currentFileAbsPath = path.resolve(opts.filenameRelative, '..');
     this.t = t;
     this.nodePath = nodePath;
+    this.state = state;
     this.packagePath = packagePath;
     this.exportVarName = '$$_export';
     this.namespace = '$$_import';
     this.packageAbsPath = path.resolve(currentFileAbsPath, packagePath);
+    this.currentFileName = opts.filename;
   }
   load() {
     if ( fs.lstatSync(this.packageAbsPath).isDirectory() ) {
-      this.assignImportToAnExportObject();
-      this.loadPackage(this.packagePath, this.packageAbsPath);
-      this.assignExport();
+      let exportVarName = `${this.exportVarName}_${shortid.generate()}`;
+      let currentFileName = this.currentFileName;
+      cache[currentFileName] = cache[currentFileName] || {};
+      this.createExportObject(exportVarName);
+      this.loadPackage(this.packagePath, this.packageAbsPath, this.t.identifier(exportVarName));
+      this.assignToExport(exportVarName);
       // remove the original path
       this.nodePath.remove();
+    } else {
+      console.warn(`"${this.packageAbsPath}" is not a directory.`);
     }
   }
-  assignImportToAnExportObject() {
+  createExportObject(exportVarName) {
+    // let $$_export = {};
     this.nodePath.insertBefore(
       this.t.variableDeclaration(
         'let',
         [
           this.t.variableDeclarator(
-            this.t.identifier(this.exportVarName),
+            this.t.identifier(exportVarName),
             this.t.objectExpression([])
           )
         ]
       )
     );
   }
-  loadPackage(dirPath, dirAbsPath, exportExpression=this.t.identifier(this.exportVarName)) {
+  loadPackage(dirPath, dirAbsPath, exportExpression) {
     let list = fs.readdirSync(dirAbsPath);
     let { name: dirNamespace } = path.parse(dirPath);
     list.forEach(fileName => {
       let file = path.join(dirAbsPath, fileName);
       let stat = fs.statSync(file);
       if ( stat.isFile() ) {
+        let cachedImport = cache[this.currentFileName][file];
         let { name: subNamespace } = path.parse(file);
-        let alias = this.namespace + '_' + shortid.generate();
-        let importPath = this.getImportPath(dirPath, subNamespace);
-        this.nodePath.insertBefore(
-          this.t.importDeclaration(
-            [this.t.importNamespaceSpecifier(this.t.identifier(alias))],
-            this.t.stringLiteral(importPath)
-          )
-        );
-        this.assignPackageVar(
+        let alias = `${this.namespace}_${shortid.generate()}`;
+        if ( ! cachedImport ) {
+          let importPath = this.getImportPath(dirPath, subNamespace);
+          // import * as $alias from '$importPath';
+          this.nodePath.insertBefore(
+            this.t.importDeclaration(
+              [this.t.importNamespaceSpecifier(this.t.identifier(alias))],
+              this.t.stringLiteral(importPath)
+            )
+          );
+          cachedImport = cache[this.currentFileName][file] = this.t.identifier(alias);
+        }
+        this.assignToPackageVar(
           this.t.memberExpression(
             exportExpression,
             this.t.stringLiteral(subNamespace),
             true
           ),
-          this.t.identifier(alias)
+          cachedImport
         );
       } else if ( stat.isDirectory() ) {
         let nextDirPath = this.getImportPath(dirPath, fileName);
-        let nextDirAbsPath = dirAbsPath + '/' + fileName;
+        let nextDirAbsPath = `${dirAbsPath}/${fileName}`;
         let nextExportExpression = this.t.memberExpression(
           exportExpression,
           this.t.stringLiteral(fileName),
           true
         );
-        this.assignPackageVar(nextExportExpression, this.t.objectExpression([]));
+        // $$_export['$module'] = {};
+        this.assignToPackageVar(nextExportExpression, this.t.objectExpression([]));
         this.loadPackage(nextDirPath, nextDirAbsPath, nextExportExpression);
       }
     });
@@ -78,7 +94,8 @@ class PackageLoader {
   getImportPath(dirPath, name) {
     return dirPath + ( dirPath.charAt(dirPath.length - 1) === '/' ? '' : '/' ) + name;
   }
-  assignPackageVar(exportExpression, valueExpression) {
+  assignToPackageVar(exportExpression, valueExpression) {
+    // $$_export['$module'] = $value;
     this.nodePath.insertBefore(
       this.t.expressionStatement(
         this.t.assignmentExpression(
@@ -89,14 +106,15 @@ class PackageLoader {
       )
     );
   }
-  assignExport() {
+  assignToExport(exportVarName) {
     let { nodePath: { node: { specifiers } } } = this;
-    let exportName = null;
+    let exportAlias = null;
     let destructuringList = [];
-    if ( specifiers.length > 1 ) {
+    // import myApp, { index, moduleA } from './myApp/*';
+    if ( specifiers.length ) {
       specifiers.forEach(specifier => {
         if ( this.t.isImportDefaultSpecifier(specifier) ) {
-          exportName = specifier.local.name;
+          exportAlias = specifier.local.name;
         } else if ( this.t.isImportSpecifier(specifier) ) {
           destructuringList.push(
             this.t.objectProperty(
@@ -104,27 +122,30 @@ class PackageLoader {
               this.t.identifier(specifier.local.name)
             )
           );
+        } else {
+          // Only import * as myApp from './myApp/*';
+          let [ firstSpecifier ] = specifiers;
+          if ( this.t.isImportNamespaceSpecifier(firstSpecifier) ) {
+            exportAlias = firstSpecifier.local.name;
+          }
         }
       });
-    } else {
-      let [ firstSpecifier ] = specifiers;
-      if ( this.t.isImportNamespaceSpecifier(firstSpecifier) ) {
-        exportName = firstSpecifier.local.name;
-      }
     }
-    if ( exportName ) {
+    // let myApp = $$_export;
+    if ( exportAlias ) {
       this.nodePath.insertBefore(
         this.t.variableDeclaration(
           'let',
           [
             this.t.variableDeclarator(
-              this.t.identifier(exportName),
-              this.t.identifier(this.exportVarName)
+              this.t.identifier(exportAlias),
+              this.t.identifier(exportVarName)
             )
           ]
         )
       );
     }
+    // let {a: A, b} = $$_export;
     if ( destructuringList.length ) {
       this.nodePath.insertBefore(
         this.t.variableDeclaration(
@@ -132,7 +153,7 @@ class PackageLoader {
           [
             this.t.variableDeclarator(
               this.t.objectPattern(destructuringList),
-              this.t.identifier(this.exportVarName)
+              this.t.identifier(exportVarName)
             )
           ]
         )
