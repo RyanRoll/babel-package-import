@@ -9,30 +9,30 @@ shortid.characters('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX
 class PackageLoader {
   constructor(t, nodePath, state, packagePath) {
     let opts = state.file.opts;
-    let currentFileAbsPath = path.resolve(opts.filenameRelative, '..');
     this.t = t;
     this.nodePath = nodePath;
     this.state = state;
     this.packagePath = packagePath;
+    this.currentFileAbsPath = path.resolve(opts.filenameRelative, '..');
     this.exportVarName = '$$_export';
     this.namespace = '$$_import';
-    this.packageAbsPath = path.resolve(currentFileAbsPath, packagePath);
     this.cache = importCache.getCache(state);
   }
   load() {
-    if ( fs.lstatSync(this.packageAbsPath).isDirectory() ) {
+    let packageAbsPath = path.resolve(this.currentFileAbsPath, this.packagePath);
+    if ( fs.lstatSync(packageAbsPath).isDirectory() ) {
       let cachedLibrary = this.cache.getLibrary();
       let exportVarName = cachedLibrary || `${this.exportVarName}_${shortid.generate()}`;
       if ( ! cachedLibrary ) {
         this.createExportObject(exportVarName);
-        this.loadPackage(this.packagePath, this.packageAbsPath, this.t.identifier(exportVarName));
+        this.loadPackage(this.packagePath, this.t.identifier(exportVarName));
       }
       this.assignToExport(exportVarName);
       // remove the original path
       this.nodePath.remove();
       this.cache.setLibrary(exportVarName);
     } else {
-      console.warn(`"${this.packageAbsPath}" is not a directory.`);
+      console.warn(`"${packageAbsPath}" is not a directory.`);
     }
   }
   createExportObject(exportVarName) {
@@ -49,7 +49,8 @@ class PackageLoader {
       )
     );
   }
-  loadPackage(dirPath, dirAbsPath, exportExpression) {
+  loadPackage(dirPath, exportExpression) {
+    let dirAbsPath = path.resolve(this.currentFileAbsPath, dirPath);
     let list = fs.readdirSync(dirAbsPath);
     let { name: dirNamespace } = path.parse(dirPath);
     list.forEach(fileName => {
@@ -81,7 +82,6 @@ class PackageLoader {
         );
       } else if ( stat.isDirectory() ) {
         let nextDirPath = this.getImportPath(dirPath, fileName);
-        let nextDirAbsPath = `${dirAbsPath}/${fileName}`;
         let nextExportExpression = this.t.memberExpression(
           exportExpression,
           this.t.stringLiteral(fileName),
@@ -89,7 +89,7 @@ class PackageLoader {
         );
         // $$_export['$module'] = {};
         this.assignToPackageVar(nextExportExpression, this.t.objectExpression([]));
-        this.loadPackage(nextDirPath, nextDirAbsPath, nextExportExpression);
+        this.loadPackage(nextDirPath, nextExportExpression);
       }
     });
   }
