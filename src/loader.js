@@ -2,10 +2,9 @@
 import path from 'path';
 import fs from 'fs';
 import shortid from 'shortid';
+import importCache from './cache';
 
 shortid.characters('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ$_');
-
-export let cache = {};
 
 class PackageLoader {
   constructor(t, nodePath, state, packagePath) {
@@ -18,18 +17,20 @@ class PackageLoader {
     this.exportVarName = '$$_export';
     this.namespace = '$$_import';
     this.packageAbsPath = path.resolve(currentFileAbsPath, packagePath);
-    this.currentFileName = opts.filename;
+    this.cache = importCache.getCache(state);
   }
   load() {
     if ( fs.lstatSync(this.packageAbsPath).isDirectory() ) {
-      let exportVarName = `${this.exportVarName}_${shortid.generate()}`;
-      let currentFileName = this.currentFileName;
-      cache[currentFileName] = cache[currentFileName] || {};
-      this.createExportObject(exportVarName);
-      this.loadPackage(this.packagePath, this.packageAbsPath, this.t.identifier(exportVarName));
+      let cachedLibrary = this.cache.getLibrary();
+      let exportVarName = cachedLibrary || `${this.exportVarName}_${shortid.generate()}`;
+      if ( ! cachedLibrary ) {
+        this.createExportObject(exportVarName);
+        this.loadPackage(this.packagePath, this.packageAbsPath, this.t.identifier(exportVarName));
+      }
       this.assignToExport(exportVarName);
       // remove the original path
       this.nodePath.remove();
+      this.cache.setLibrary(exportVarName);
     } else {
       console.warn(`"${this.packageAbsPath}" is not a directory.`);
     }
@@ -55,10 +56,10 @@ class PackageLoader {
       let file = path.join(dirAbsPath, fileName);
       let stat = fs.statSync(file);
       if ( stat.isFile() ) {
-        let cachedImport = cache[this.currentFileName][file];
+        let cachedFile = this.cache.getFile(file);
         let { name: subNamespace } = path.parse(file);
         let alias = `${this.namespace}_${shortid.generate()}`;
-        if ( ! cachedImport ) {
+        if ( ! cachedFile ) {
           let importPath = this.getImportPath(dirPath, subNamespace);
           // import * as $alias from '$importPath';
           this.nodePath.insertBefore(
@@ -67,7 +68,8 @@ class PackageLoader {
               this.t.stringLiteral(importPath)
             )
           );
-          cachedImport = cache[this.currentFileName][file] = this.t.identifier(alias);
+          cachedFile = this.t.identifier(alias);
+          this.cache.setFile(file, cachedFile);
         }
         this.assignToPackageVar(
           this.t.memberExpression(
@@ -75,7 +77,7 @@ class PackageLoader {
             this.t.stringLiteral(subNamespace),
             true
           ),
-          cachedImport
+          cachedFile
         );
       } else if ( stat.isDirectory() ) {
         let nextDirPath = this.getImportPath(dirPath, fileName);
