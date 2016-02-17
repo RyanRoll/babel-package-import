@@ -1,7 +1,7 @@
 import test from 'tape';
 import path from 'path';
 import { types, traverse, transformFileSync } from 'babel-core';
-import * as babylon from 'babel-core/node_modules/babylon/index';
+import * as babylon from 'babylon';
 import plugin from '../../lib/index';
 
 test('● Test Plugin', t => {

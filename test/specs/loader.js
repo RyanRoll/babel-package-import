@@ -1,7 +1,7 @@
 import test from 'tape';
 import { types, traverse } from 'babel-core';
-import * as babylon from 'babel-core/node_modules/babylon/index';
-import generate from 'babel-core/node_modules/babel-generator/lib/index';
+import * as babylon from 'babylon';
+import generate from 'babel-generator';
 import PackageLoader from '../../lib/loader';
 
 test('● Test PackageLoader', t => {

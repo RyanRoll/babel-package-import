@@ -1,6 +1,6 @@
 {
   "name": "babel-package-import",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "",
   "main": "lib/index.js",
   "directories": {
@@ -24,13 +24,16 @@
   },
   "homepage": "https://github.com/RyanRoll/babel-package-import#readme",
   "dependencies": {
-    "babel-core": "^6.4.0",
-    "shortid": "^2.2.4"
+    "babel-core": "^6.5.2",
+    "shortid": "^2.2.4",
+    "update": "^0.4.2"
   },
   "devDependencies": {
+    "babel-generator": "^6.5.0",
     "babel-polyfill": "^6.5.0",
     "babel-preset-es2015": "^6.3.13",
     "babel-register": "^6.5.2",
+    "babylon": "^6.5.2",
     "tap-spec": "^4.1.1",
     "tape": "^4.4.0"
   }
