@@ -1,3 +1,4 @@
+import 'babel-polyfill';
 import test from 'tape';
 import importCache, { Cache } from '../../lib/cache';
 
