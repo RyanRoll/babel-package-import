@@ -11,26 +11,26 @@ class PackageLoader {
     let opts = state.file.opts;
     this.t = t;
     this.nodePath = nodePath;
-    this.state = state;
     this.packagePath = packagePath;
     this.currentFileAbsPath = path.resolve(opts.filenameRelative, '..');
     this.exportVarName = '$$_export';
     this.namespace = '$$_import';
     this.cache = importCache.getCache(state);
   }
-  load() {
+  load(progress=()=>{}) {
     let packageAbsPath = path.resolve(this.currentFileAbsPath, this.packagePath);
     if ( fs.lstatSync(packageAbsPath).isDirectory() ) {
       let cachedLibrary = this.cache.getLibrary();
       let exportVarName = cachedLibrary || `${this.exportVarName}_${shortid.generate()}`;
       if ( ! cachedLibrary ) {
         this.createExportObject(exportVarName);
-        this.loadPackage(this.packagePath, this.t.identifier(exportVarName));
+        this.loadPackage(this.packagePath, this.t.identifier(exportVarName), progress);
       }
       this.assignToExport(exportVarName);
       // remove the original path
       this.nodePath.remove();
       this.cache.setLibrary(exportVarName);
+      return exportVarName;
     } else {
       console.warn(`"${packageAbsPath}" is not a directory.`);
     }
@@ -49,7 +49,7 @@ class PackageLoader {
       )
     );
   }
-  loadPackage(dirPath, exportExpression) {
+  loadPackage(dirPath, exportExpression, progress=()=>{}) {
     let dirAbsPath = path.resolve(this.currentFileAbsPath, dirPath);
     let list = fs.readdirSync(dirAbsPath);
     let { name: dirNamespace } = path.parse(dirPath);
@@ -59,27 +59,29 @@ class PackageLoader {
       if ( stat.isFile() ) {
         let cachedFile = this.cache.getFile(file);
         let { name: subNamespace } = path.parse(file);
-        let alias = `${this.namespace}_${shortid.generate()}`;
+        let importExpression;
         if ( ! cachedFile ) {
+          let alias = `${this.namespace}_${shortid.generate()}`;
           let importPath = this.getImportPath(dirPath, subNamespace);
           // import * as $alias from '$importPath';
-          this.nodePath.insertBefore(
-            this.t.importDeclaration(
-              [this.t.importNamespaceSpecifier(this.t.identifier(alias))],
-              this.t.stringLiteral(importPath)
-            )
+          importExpression = this.t.importDeclaration(
+            [this.t.importNamespaceSpecifier(this.t.identifier(alias))],
+            this.t.stringLiteral(importPath)
           );
+          this.nodePath.insertBefore(importExpression);
           cachedFile = this.t.identifier(alias);
           this.cache.setFile(file, cachedFile);
         }
+        let varExpression = this.t.memberExpression(
+          exportExpression,
+          this.t.stringLiteral(subNamespace),
+          true
+        );
         this.assignToPackageVar(
-          this.t.memberExpression(
-            exportExpression,
-            this.t.stringLiteral(subNamespace),
-            true
-          ),
+          varExpression,
           cachedFile
         );
+        progress('file', varExpression, cachedFile, importExpression);
       } else if ( stat.isDirectory() ) {
         let nextDirPath = this.getImportPath(dirPath, fileName);
         let nextExportExpression = this.t.memberExpression(
@@ -88,11 +90,14 @@ class PackageLoader {
           true
         );
         // $$_export['$module'] = {};
-        this.assignToPackageVar(nextExportExpression, this.t.objectExpression([]));
-        this.loadPackage(nextDirPath, nextExportExpression);
+        let valueExpression = this.t.objectExpression([]);
+        this.assignToPackageVar(nextExportExpression, valueExpression);
+        progress('directory', nextExportExpression, valueExpression);
+        this.loadPackage(nextDirPath, nextExportExpression, progress);
       }
     });
   }
+  // get raw path instead of path.join
   getImportPath(dirPath, name) {
     return dirPath + ( dirPath.charAt(dirPath.length - 1) === '/' ? '' : '/' ) + name;
   }

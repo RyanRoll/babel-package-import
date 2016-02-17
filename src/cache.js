@@ -10,22 +10,22 @@ class ImportCache {
 
 export class Cache {
   constructor() {
-    this.cache = {
+    this.store = {
       library: null,
       files: {}
     };
   }
   getLibrary() {
-    return this.cache.library;
+    return this.store.library;
   }
   setLibrary(exportVarName) {
-    this.cache.library = exportVarName;
+    this.store.library = exportVarName;
   }
   getFile(filePath) {
-    return this.cache.files[filePath];
+    return this.store.files[filePath];
   }
   setFile(filePath, expression) {
-    this.cache.files[filePath] = expression;
+    this.store.files[filePath] = expression;
   }
 }
 

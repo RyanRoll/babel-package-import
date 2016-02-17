@@ -1,6 +1,6 @@
 {
   "name": "babel-package-import",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "",
   "main": "lib/index.js",
   "directories": {
@@ -8,8 +8,9 @@
   },
   "scripts": {
     "build": "babel -d lib/ src/",
+    "test": "tape -r babel-register test/specs/**/*.js | tap-spec",
     "simple-test": "babel --plugins ./lib/index.js test/test.js",
-    "buildnsimpletest": "npm run build && npm run simple-test",
+    "buildNsimpletest": "npm run build && npm run simple-test",
     "compile-test": "babel --plugins ./lib/index.js test/test.js test/test2.js --out-file test/test.bundle.js && babel-node test/test.bundle.js"
   },
   "repository": {
@@ -17,7 +18,7 @@
     "url": "git+https://github.com/RyanRoll/babel-package-import.git"
   },
   "author": "RyanRoll",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/RyanRoll/babel-package-import/issues"
   },
@@ -28,6 +29,8 @@
   },
   "devDependencies": {
     "babel-preset-es2015": "^6.3.13",
-    "tap": "^5.4.3"
+    "babel-register": "^6.5.2",
+    "tap-spec": "^4.1.1",
+    "tape": "^4.4.0"
   }
 }
