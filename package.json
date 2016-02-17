@@ -1,6 +1,6 @@
 {
   "name": "babel-package-import",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "",
   "main": "lib/index.js",
   "directories": {
@@ -25,8 +25,7 @@
   "homepage": "https://github.com/RyanRoll/babel-package-import#readme",
   "dependencies": {
     "babel-core": "^6.5.2",
-    "shortid": "^2.2.4",
-    "update": "^0.4.2"
+    "shortid": "^2.2.4"
   },
   "devDependencies": {
     "babel-generator": "^6.5.0",
